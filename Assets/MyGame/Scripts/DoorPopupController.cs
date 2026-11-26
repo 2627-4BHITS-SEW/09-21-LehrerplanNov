@@ -20,6 +20,13 @@ public class DoorPopupController : MonoBehaviour
     // "static" = alle Türen teilen sich diese eine Variable.
     static DoorPopupController currentlyOpen;
 
+    // Domain Reload ist im Projekt aus -> static-Variable bei jedem Play-Start zurücksetzen
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        currentlyOpen = null;
+    }
+
     RectTransform popupRect;
     RectTransform canvasRect;
     Text popupText;

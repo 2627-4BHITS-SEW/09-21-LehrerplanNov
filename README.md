@@ -29,3 +29,12 @@ Nochmal auf die Tür oder auf das Popup klicken schließt es.
 4. Telefonnummer = `+43 662 453610-` + Durchwahl (Tel-DW).
 
 Die Übersichtsseite wird nur einmal geladen, Ergebnisse pro Raum werden zwischengespeichert.
+
+## Logging & Tests
+
+Jeder Request wird in der Unity Console geloggt: `[Request-Start]` direkt vor dem Aufruf,
+`[Request-Ende]` mit URL, HTTP-Status, Result und Ergebnis, `[Cache]` wenn kein Request nötig ist.
+Weil *Domain Reload* beim Play-Start ausgeschaltet ist, werden die `static`-Daten bei jedem Play-Start
+zurückgesetzt – jede Play-Session startet also frisch.
+
+Testergebnisse: [TESTPROTOKOLL.md](TESTPROTOKOLL.md)

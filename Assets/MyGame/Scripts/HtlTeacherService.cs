@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Text.RegularExpressions;
+using UnityEngine;
 using UnityEngine.Networking;
 
 // Holt die Lehrer:innen eines Raums von der HTL-Website.
@@ -51,6 +52,26 @@ public static class HtlTeacherService
     // Schon geladene Räume merken: Raum -> Lehrer:innen
     static Dictionary<string, List<TeacherInfo>> cache = new Dictionary<string, List<TeacherInfo>>();
 
+    // Im Projekt ist "Enter Play Mode Options -> Domain Reload" ausgeschaltet. Dann behalten
+    // static-Variablen ihren Wert vom letzten Play-Durchlauf. Damit jede Play-Session frisch
+    // startet (Übersicht + Cache leer), wird hier beim Start alles zurückgesetzt.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        listHtml = null;
+        listIsLoading = false;
+        cache = new Dictionary<string, List<TeacherInfo>>();
+    }
+
+    // Log-Zeile nach einem Request: URL, HTTP-Status und Ergebnis (Success, ConnectionError, ...)
+    static string DescribeRequest(UnityWebRequest request)
+    {
+        string text = request.url + " -> HTTP " + request.responseCode + " (" + request.result + ")";
+        if (request.result != UnityWebRequest.Result.Success)
+            text += " Fehler: " + request.error;
+        return text;
+    }
+
 
     // Macht aus einem Text eine einheitliche Raumnummer.
     // "Tür b310" -> "B310",  "B 313" -> "B313",  kein Raum gefunden -> null
@@ -87,6 +108,7 @@ public static class HtlTeacherService
         // Raum schon einmal geladen? Dann das gemerkte Ergebnis verwenden.
         if (cache.ContainsKey(room))
         {
+            Debug.Log("[Cache] Raum " + room + " ist schon geladen -> kein neuer Request (" + cache[room].Count + " Lehrer:innen)");
             onSuccess(cache[room]);
             yield break;
         }
@@ -101,18 +123,26 @@ public static class HtlTeacherService
         {
             listIsLoading = true;
             UnityWebRequest listRequest = UnityWebRequest.Get(ListUrl);
+            Debug.Log("[Request-Start] Übersicht: " + ListUrl);
             yield return listRequest.SendWebRequest();
             listIsLoading = false;
 
             if (listRequest.result != UnityWebRequest.Result.Success)
             {
+                Debug.LogWarning("[Request-Ende] Übersicht: " + DescribeRequest(listRequest));
                 onError("Lehrerliste konnte nicht geladen werden:\n" + listRequest.error);
                 listRequest.Dispose();
                 yield break;
             }
 
             listHtml = listRequest.downloadHandler.text;
+            Debug.Log("[Request-Ende] Übersicht: " + DescribeRequest(listRequest) +
+                      " -> " + listEntryRegex.Matches(listHtml).Count + " Lehrer:innen gefunden");
             listRequest.Dispose();
+        }
+        else
+        {
+            Debug.Log("[Cache] Übersicht ist schon geladen -> kein neuer Request für " + ListUrl);
         }
 
         // Alle Einträge der Übersicht durchgehen und die Lehrer:innen des gesuchten Raums sammeln
@@ -141,6 +171,7 @@ public static class HtlTeacherService
         foreach (TeacherInfo teacher in teachers)
         {
             UnityWebRequest request = UnityWebRequest.Get(teacher.DetailUrl);
+            Debug.Log("[Request-Start] Detailseite (Raum " + room + "): " + teacher.DetailUrl);
             request.SendWebRequest();
             requests.Add(request);
         }
@@ -168,6 +199,8 @@ public static class HtlTeacherService
                 string roomOnPage = NormalizeRoom(ReadField(html, "Raum"));
                 if (roomOnPage != null && roomOnPage != room)
                 {
+                    Debug.Log("[Request-Ende] Detailseite: " + DescribeRequest(request) +
+                              " -> Raum laut Detailseite " + roomOnPage + ", wird für " + room + " ignoriert");
                     request.Dispose();
                     continue;
                 }
@@ -177,6 +210,13 @@ public static class HtlTeacherService
                     teacher.Name = fullName;
 
                 teacher.PhoneExtension = ReadField(html, "Telefon");
+                Debug.Log("[Request-Ende] Detailseite: " + DescribeRequest(request) +
+                          " -> " + teacher.Name + ", Raum " + (roomOnPage ?? "?") +
+                          ", Tel-DW " + (teacher.PhoneExtension ?? "-"));
+            }
+            else
+            {
+                Debug.LogWarning("[Request-Ende] Detailseite: " + DescribeRequest(request));
             }
             // Falls die Detailseite nicht geladen werden konnte, bleibt die Person
             // trotzdem in der Liste (nur ohne Telefonnummer).
